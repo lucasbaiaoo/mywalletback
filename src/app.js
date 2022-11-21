@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import joi from "joi";
 import bcrypt from "bcrypt";
 import { v4 as uuid } from "uuid";
+import dayjs from "dayjs"
 
 dotenv.config();
 
@@ -37,23 +38,35 @@ server.post("/sign-up", async (req, res) => {
 });
 
 server.post("/sign-in", async (req, res) => {
-    const userInfo = req.body;
-    const token = uuid();
+  const userInfo = req.body;
+  const token = uuid();
 
-    const user = await db.collection("users").findOne({email: userInfo.email});
+  const user = await db.collection("users").findOne({ email: userInfo.email });
 
-    if(user && bcrypt.compareSync(userInfo.password, user.password)) {
-        await db.collection("sessions").insertOne({
-            token, 
-            userId: user._id
-        });
+  if (user && bcrypt.compareSync(userInfo.password, user.password)) {
+    await db.collection("sessions").insertOne({
+      token,
+      userId: user._id,
+    });
 
-        delete user.password;
+    delete user.password;
 
-        res.send({token, ...user})
-    } else {
-        res.sendStatus(401);
-    }
-})
+    res.send({ token, ...user });
+  } else {
+    res.sendStatus(401);
+  }
+});
+
+server.post("/statement", async (req, res) => {
+  const statement = req.body;
+
+  try {
+    await db.collection("transactions").insertOne({ statement, createdAt: dayjs().format("DD/MM") });
+    res.sendStatus(201);
+  } catch (err) {
+    console.log(err);
+    res.sendStatus(500);
+  }
+});
 
 server.listen(5000);
