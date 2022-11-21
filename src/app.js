@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 import joi from "joi";
 import bcrypt from "bcrypt";
 import { v4 as uuid } from "uuid";
-import dayjs from "dayjs"
+import dayjs from "dayjs";
 
 dotenv.config();
 
@@ -31,8 +31,8 @@ server.post("/sign-up", async (req, res) => {
   try {
     await db.collection("users").insertOne({ ...user, password: hashPassword });
     res.sendStatus(201);
-  } catch (err) {
-    console.log(err);
+  } catch (error) {
+    console.log(error);
     res.sendStatus(500);
   }
 });
@@ -41,19 +41,26 @@ server.post("/sign-in", async (req, res) => {
   const userInfo = req.body;
   const token = uuid();
 
-  const user = await db.collection("users").findOne({ email: userInfo.email });
+  try {
+    const user = await db
+      .collection("users")
+      .findOne({ email: userInfo.email });
 
-  if (user && bcrypt.compareSync(userInfo.password, user.password)) {
-    await db.collection("sessions").insertOne({
-      token,
-      userId: user._id,
-    });
+    if (user && bcrypt.compareSync(userInfo.password, user.password)) {
+      await db.collection("sessions").insertOne({
+        token,
+        userId: user._id,
+      });
 
-    delete user.password;
+      delete user.password;
 
-    res.send({ token, ...user });
-  } else {
-    res.sendStatus(401);
+      res.send({ token, ...user });
+    } else {
+      res.sendStatus(401);
+    }
+  } catch (error) {
+    console.log(error);
+    res.sendStatus(500);
   }
 });
 
@@ -61,9 +68,51 @@ server.post("/statement", async (req, res) => {
   const statement = req.body;
 
   try {
-    await db.collection("transactions").insertOne({ statement, createdAt: dayjs().format("DD/MM") });
+    await db
+      .collection("transactions")
+      .insertOne({ ...statement, price: Number(statement.price), createdAt: dayjs().format("DD/MM") });
     res.sendStatus(201);
   } catch (err) {
+    console.log(err);
+    res.sendStatus(500);
+  }
+});
+
+server.get("/statement", async (req, res) => {
+  const authorization = req.headers.authorization;
+  const token = authorization?.replace("Bearer ", "");
+
+  if (!token) {
+    res.sendStatus(401);
+    return;
+  }
+
+  try {
+    const session = await db.collection("sessions").findOne({ token });
+
+    if (!session) {
+      res.sendStatus(401);
+      return;
+    }
+
+    const user = await db.collection("users").findOne({
+      _id: session.userId,
+    });
+
+    if (user) {
+      const userTransactions = await db.collection("transactions").find({name: user.name}).toArray();
+      let balance = 0
+
+      for(let i = 0; i < userTransactions.length; i++){
+        if(userTransactions[i].type === "income"){
+          balance += userTransactions[i].price
+        } else {
+          balance -= userTransactions[i].price
+        }
+      }
+      res.send({userTransactions, balance});
+    }
+  } catch (error) {
     console.log(err);
     res.sendStatus(500);
   }
