@@ -9,6 +9,17 @@ import dayjs from "dayjs";
 
 dotenv.config();
 
+const signInSchema = joi.object({
+  email: joi.string().email().trim().required(),
+  password: joi.string().required()
+});
+
+const signUpSchema = joi.object({
+  name: joi.string().trim().required(),
+  email: joi.string().email().trim().required(),
+  password: joi.string().alphanum().required()
+});
+
 const mongoClient = new MongoClient(process.env.MONGO_URI);
 let db;
 
@@ -27,6 +38,13 @@ server.use(express.json());
 server.post("/sign-up", async (req, res) => {
   const user = req.body;
   const hashPassword = bcrypt.hashSync(user.password, 10);
+  const validation = signUpSchema.validate(req.body, {abortEarly: false});
+
+    if(validation.error){
+        const errors = validation.error.details.map((detail) => detail.message);
+        res.status(422).send(errors);
+        return;
+    }
 
   try {
     await db.collection("users").insertOne({ ...user, password: hashPassword });
@@ -40,6 +58,13 @@ server.post("/sign-up", async (req, res) => {
 server.post("/sign-in", async (req, res) => {
   const userInfo = req.body;
   const token = uuid();
+  const validation = signInSchema.validate(req.body, {abortEarly: false});
+
+    if(validation.error){
+        const errors = validation.error.details.map((detail) => detail.message);
+        res.status(422).send(errors);
+        return;
+    }
 
   try {
     const user = await db
